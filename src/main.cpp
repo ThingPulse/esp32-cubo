@@ -1,71 +1,46 @@
+/*
+MIT License
+
+Copyright (c) 2020 ThingPulse GmbH
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+
 #include <SPI.h>
 #include <WiFi.h>
 #include <Wire.h> 
 #include "max17055.h"
-#include "qrcode.h"
 #include "EPD_WaveShare_154D67.h"
 #include <RtcDS3231.h>
 #include "MiniGrafx.h"
 #include "DisplayDriver.h"
 #include <esp_wifi.h>
 #include <esp_bt.h>
-#include <bsec.h>
-#include <SPIFFS.h>
-#include "BigNumber.h"
-#include "MD5.h"
 #include "driver/adc.h"
 #include "settings.h"
+#include "ADXL345.h"
 
-/* Configure the BSEC library with information about the sensor
-    18v/33v = Voltage at Vdd. 1.8V or 3.3V
-    3s/300s = BSEC operating mode, BSEC_SAMPLE_RATE_LP or BSEC_SAMPLE_RATE_ULP
-    4d/28d = Operating age of the sensor in days
-    generic_18v_3s_4d
-    generic_18v_3s_28d
-    generic_18v_300s_4d
-    generic_18v_300s_28d
-    generic_33v_3s_4d
-    generic_33v_3s_28d
-    generic_33v_300s_4d
-    generic_33v_300s_28d
-*/
-const uint8_t bsec_config_iaq[] = {
-#include "config/generic_33v_3s_4d/bsec_iaq.txt"
-};
 #include <sys/time.h>
 
 //#define LOG(fmt, ...) (Serial.printf("%09llu: " fmt "\n", GetTimestamp(), ##__VA_ARGS__))
 
-Bsec sensor;
 
-RTC_DATA_ATTR uint8_t sensor_state[BSEC_MAX_STATE_BLOB_SIZE] = {0};
-RTC_DATA_ATTR int64_t sensor_state_time = 0;
-RTC_DATA_ATTR uint16_t bootCounter = 0;
-RTC_DATA_ATTR uint16_t accuracyCounter = 0;
-RTC_DATA_ATTR uint16_t lastAccuracy = 0;
-
-#define BME_STATE_FILE_1 "/bme1.bin"
-#define BME_STATE_FILE_2 "/bme2.bin"
-#define BME_STATE_FILE_3 "/bme3.bin"
-
-bsec_virtual_sensor_t sensor_list[] = {
-  BSEC_OUTPUT_RAW_TEMPERATURE,
-  BSEC_OUTPUT_RAW_PRESSURE,
-  BSEC_OUTPUT_RAW_HUMIDITY,
-  BSEC_OUTPUT_RAW_GAS,
-  BSEC_OUTPUT_IAQ,
-  BSEC_OUTPUT_STATIC_IAQ,
-  BSEC_OUTPUT_CO2_EQUIVALENT,
-  BSEC_OUTPUT_BREATH_VOC_EQUIVALENT,
-  BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE,
-  BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY,
-};
-
-
-
-
-// 16 chars but we need 1 extra character as it's a 0-terminated string
-char deviceId[17];
 uint16_t palette[] = {0, 1};
 
 EPD_WaveShare154D67 epd(EPD_CS, EPD_RST, EPD_DC, EPD_BUSY);
@@ -74,6 +49,7 @@ MiniGrafx gfx = MiniGrafx(&epd, BITS_PER_PIXEL, palette, EPD_WIDTH, EPD_HEIGHT);
 RtcDS3231<TwoWire> Rtc(Wire);
 MAX17055 gauge;
 MAX17055::platform_data design_param;
+ADXL345 accelerometer;
 
 /*****************************************************************************/
 /* Function declarat                                                         */
@@ -86,13 +62,14 @@ void initDeviceId();
 void initFuelGauge();
 void initGfx();
 void initRtc();
-void initBme();
-bool CheckSensor();
+void initIMU();
+uint8_t getRotation(uint8_t sampleCount);
+void drawScreen();
+
 int64_t GetTimestamp();
-void drawAirQuality();
+
 void drawValue(uint8_t line, String label, String value, String unit);
-void storeState(String name);
-void loadState(String name);
+
 
 /*****************************************************************************/
 /* Main processing                                                           */
@@ -101,42 +78,28 @@ void setup() {
   WiFi.mode(WIFI_OFF);
   btStop();
   Serial.begin(115200);
-  bootCounter++;
-
-  if(!SPIFFS.begin(true)){
-    Serial.println("An Error has occurred while mounting SPIFFS");
-    return;
-  }
 
   log_d("Compile time (local system time zone): %s %s", __DATE__, __TIME__);
   log_d("Millis at start: %d\n", millis());
 
   initGfx();
-
-  Wire.begin(BME_SDA, BME_SCL);
-  initBme();
-  drawAirQuality();
+  initIMU();
+  uint8_t rotation = getRotation(5);
+  log_d("Current rotation: %d", rotation);
 
   // due to limited number of pins, use pin 0 and 2 for SDA, SCL
   Wire.begin(RTC_SDA, RTC_SCL);
   initRtc();
   initFuelGauge();
 
-
-  String deviceIdString = String(deviceId);
   RtcDateTime now = Rtc.GetDateTime();
   gfx.setFont(ArialMT_Plain_16);
 
-
-  //drawQrCode(text);
+  drawScreen();
 
   uint32_t startTime = millis();
   log_d("Commit time: %d\n", millis() - startTime);
-  //goToDeepSleep();
-  uint64_t time_us = ((sensor.nextCall - GetTimestamp()) * 1000) - esp_timer_get_time();
-  log_d("Deep sleep for %llu ms. BSEC next call at %llu ms.", time_us / 1000, sensor.nextCall);
-  esp_sleep_enable_timer_wakeup(time_us + 5 * 1000 * + 1000);
-  esp_deep_sleep_start();
+  goToDeepSleep();
 }
 
 void loop() {}
@@ -144,132 +107,12 @@ void loop() {}
 /*****************************************************************************/
 /* Functions                                                                 */
 /*****************************************************************************/
-void DumpState(const char* name, const uint8_t* state) {
-  log_d("%s:", name);
-  for (int i = 0; i < BSEC_MAX_STATE_BLOB_SIZE; i++) {
-    Serial.printf("%02x ", state[i]);
-    if (i % 16 == 15) {
-      Serial.print("\n");
-    }
-  }
-  Serial.print("\n");
-}
 
-void drawValue(uint8_t line, String label, String value, String unit) {
-  uint16_t y = line * 16;
-  gfx.setFont(ArialMT_Plain_16);
-  gfx.setTextAlignment(TEXT_ALIGN_LEFT);
-  gfx.drawString(0, y, label);
-  gfx.drawString(175, y, unit);
-  gfx.setTextAlignment(TEXT_ALIGN_RIGHT);
-  gfx.drawString(170, y, value);
-}
-
-void drawAirQuality() {
-  if (sensor.run(GetTimestamp())) {
-    log_d("Temperature raw %.2f compensated %.2f", sensor.rawTemperature, sensor.temperature);
-    log_d("Humidity raw %.2f compensated %.2f", sensor.rawHumidity, sensor.humidity);
-    log_d("Pressure %.2f kPa", sensor.pressure / 1000);
-    log_d("IAQ %.0f accuracy %d", sensor.iaq, sensor.iaqAccuracy);
-    log_d("Static IAQ %.0f accuracy %d", sensor.staticIaq, sensor.staticIaqAccuracy);
-    log_d("Gas resistance %.2f kOhm", sensor.gasResistance / 1000);
-    log_d("CO2 equivalent %.2f", sensor.co2Equivalent);
-    log_d("Breath VOC equivalent %.2f", sensor.breathVocEquivalent);
-    log_d("BootCounter %d", bootCounter);
-    if (sensor.iaqAccuracy > lastAccuracy) {
-      accuracyCounter = bootCounter;
-      switch(sensor.iaqAccuracy) {
-        case 1:
-          storeState(String(BME_STATE_FILE_1));
-          break;
-        case 2:
-          storeState(String(BME_STATE_FILE_2));
-          break;
-        case 3:
-          storeState(String(BME_STATE_FILE_3));
-          break;
-      }
-    }
-    lastAccuracy = sensor.iaqAccuracy;
-    log_d("Loops until acc > 0 %d", accuracyCounter);
-    gfx.fillBuffer(1);
-    gfx.setColor(0);
-    drawValue(1, "Time", String(sensor.rawTemperature), "°C");
-    drawValue(1, "Temp raw", String(sensor.rawTemperature), "°C");
-    drawValue(2, "Temp comp", String(sensor.temperature), "°C");
-    drawValue(3, "Pressure", String(sensor.pressure / 1000), "kPa");
-    drawValue(4, "IAQ", String(sensor.iaq), "");
-    drawValue(5, "Accuracy", String(sensor.iaqAccuracy), "");
-    drawValue(6, "Static IAQ", String(sensor.staticIaq), "");
-    drawValue(7, "Accuracy", String(sensor.staticIaqAccuracy), "");
-    drawValue(8, "Gas resistance", String(sensor.gasResistance / 1000), "kOhm");
-    drawValue(9, "eCO2", String(sensor.co2Equivalent), "");
-    drawValue(10, "VOC", String(sensor.breathVocEquivalent), "");
-    drawValue(11, "#Boots", String(bootCounter), "");
-    //gfx.commit();
-
-    sensor_state_time = GetTimestamp();
-    sensor.getState(sensor_state);
-    //DumpState("getState", sensor_state);
-    log_d("Saved state to RTC memory at %lld", sensor_state_time);
-    CheckSensor();
-
-    uint64_t time_us = ((sensor.nextCall - GetTimestamp()) * 1000) - esp_timer_get_time();
-
-  }
-}
-
-void storeState(String name) {
-    log_d("Writing file: %s\n", name.c_str());
-
-    File file = SPIFFS.open(name.c_str(), FILE_WRITE);
-    if(!file){
-        Serial.println("Failed to open file for writing");
-        return;
-    }
-    sensor.getState(sensor_state);
-    if(file.write(sensor_state, BSEC_MAX_STATE_BLOB_SIZE)){
-        Serial.println("File written");
-    } else {
-        Serial.println("Write failed");
-    }
-    file.close();
-}
-void loadState(String name) {
-    Serial.printf("Reading file: %s\n", name.c_str());
-
-    File file = SPIFFS.open(name.c_str());
-    if(!file){
-        Serial.println("Failed to open file for reading");
-        return;
-    }
-
-    Serial.print("Read from file: ");
-    while(file.available()){
-        file.read(sensor_state, BSEC_MAX_STATE_BLOB_SIZE);
-    }
-    sensor.setState(sensor_state);
-    DumpState("fromFile", sensor_state);
-    CheckSensor();
-    file.close();
-}
-
-bool CheckSensor() {
-  if (sensor.status < BSEC_OK) {
-    log_d("BSEC error, status %d!", sensor.status);
-    return false;;
-  } else if (sensor.status > BSEC_OK) {
-    log_d("BSEC warning, status %d!", sensor.status);
-  }
-
-  if (sensor.bme680Status < BME680_OK) {
-    log_d("Sensor error, bme680_status %d!", sensor.bme680Status);
-    return false;
-  } else if (sensor.bme680Status > BME680_OK) {
-    log_d("Sensor warning, status %d!", sensor.bme680Status);
-  }
-
-  return true;
+void drawScreen() {
+  gfx.fillBuffer(MINI_WHITE);
+  gfx.setColor(MINI_BLACK);
+  gfx.drawString(10, 10, "Hello world");
+  gfx.commit();
 }
 
 int64_t GetTimestamp() {
@@ -315,54 +158,87 @@ void goToDeepSleep() {
   pinMode(USR_LED_2, mode);
 
   log_d("Time before sleep: %d\n", millis());
-  esp_sleep_enable_ext0_wakeup(RTC_INT, 0);
+  //esp_sleep_enable_ext0_wakeup(RTC_INT, 0);
 
   esp_deep_sleep_start();
 }
 
-void initBme() {
-
-  sensor.begin(BME680_I2C_ADDR_SECONDARY, Wire);
-  if (!CheckSensor()) {
-    log_d("Failed to init BME680, check wiring!");
-    return;
+void initIMU() {
+  if (!accelerometer.begin(IMU_SDA, IMU_SCL))
+  {
+    Serial.println("Could not find a valid ADXL345 sensor, check wiring!");
+    delay(500);
   }
 
-  log_d("BSEC version %d.%d.%d.%d", sensor.version.major, sensor.version.minor, sensor.version.major_bugfix, sensor.version.minor_bugfix);
 
-  sensor.setConfig(bsec_config_iaq);
-  if (!CheckSensor()) {
-    log_d("Failed to set config!");
-    return;
-  }
+  // Set tap detection on Z-Axis
+  accelerometer.setTapDetectionX(1);       // Don't check tap on X-Axis
+  accelerometer.setTapDetectionY(1);       // Don't check tap on Y-Axis
+  accelerometer.setTapDetectionZ(1);       // Check tap on Z-Axis
+  // or
+  // accelerometer.setTapDetectionXYZ(1);  // Check tap on X,Y,Z-Axis
 
-  if (sensor_state_time) {
-    DumpState("setState", sensor_state);
-    sensor.setState(sensor_state);
-    if (!CheckSensor()) {
-      log_d("Failed to set state!");
-      return;
-    } else {
-      log_d("Successfully set state from %lld", sensor_state_time);
-    }
-  } else if (SPIFFS.exists(BME_STATE_FILE_3)) {
-    loadState(String(BME_STATE_FILE_3));
-  } else if (SPIFFS.exists(BME_STATE_FILE_2)) {
-    loadState(String(BME_STATE_FILE_2));
-  } else if (SPIFFS.exists(BME_STATE_FILE_1)) {
-    loadState(String(BME_STATE_FILE_1));
-  } else {
-    log_d("Saved state missing");
-  }
+  accelerometer.setTapThreshold(2.5);      // Recommended 2.5 g
+  accelerometer.setTapDuration(0.02);      // Recommended 0.02 s
+  accelerometer.setDoubleTapLatency(0.10); // Recommended 0.10 s
+  accelerometer.setDoubleTapWindow(0.30);  // Recommended 0.30 s
 
-  sensor.updateSubscription(sensor_list, sizeof(sensor_list) / sizeof(sensor_list[0]), BSEC_SAMPLE_RATE_LP);
-  if (!CheckSensor()) {
-    log_d("Failed to update subscription!");
-    return;
-  }
+  accelerometer.setActivityThreshold(2.0);    // Recommended 2 g
+  accelerometer.setInactivityThreshold(2.0);  // Recommended 2 g
+  accelerometer.setTimeInactivity(5);         // Recommended 5 s
 
-  log_d("Sensor init done");
+  // Set activity detection only on X,Y,Z-Axis
+  //accelerometer.setActivityXYZ(1);         // Check activity on X,Y,Z-Axis
+  // or
+  accelerometer.setActivityX(1);        // Check activity on X_Axis
+  accelerometer.setActivityY(1);        // Check activity on Y-Axis
+  accelerometer.setActivityZ(0);        // Check activity on Z-Axis
+
+  // Set inactivity detection only on X,Y,Z-Axis
+  //accelerometer.setInactivityXYZ(1);       // Check inactivity on X,Y,Z-Axis
+
+  // Select INT 1 for get activities
+  accelerometer.useInterrupt(ADXL345_INT1);
+  //pinMode(IMU_INT, INPUT);
+  esp_sleep_enable_ext0_wakeup(IMU_INT, 1);
 }
+
+uint8_t getRotation(uint8_t sampleCount) {
+  Vector norm = accelerometer.readNormalize();
+  // We need to read activities to flush FIFO buffer
+  Activites activites = accelerometer.readActivites();
+  uint8_t rotation = 0;
+  uint8_t unchangedRotationCount = 0;
+  uint8_t currentRotation = 0;
+  while (true) {
+    if (norm.ZAxis > 8) {
+      return 4;
+    } else if (norm.XAxis > 8) {
+      currentRotation = 1;
+    } else if (norm.XAxis < -8) {
+      currentRotation = 3;
+    } else if (norm.YAxis > 8) {
+      currentRotation = 2;
+    } else if (norm.YAxis < -8) {
+      currentRotation = 0;
+    } else {
+      currentRotation =  3;
+    }
+    if (rotation == currentRotation) {
+      unchangedRotationCount++;
+    } else {
+      rotation = currentRotation;
+      unchangedRotationCount = 0;
+    }
+
+    if (unchangedRotationCount > sampleCount) {
+      return rotation;
+    }
+    delay (100);
+  }
+  return 0;
+}
+
 
 void initFuelGauge() {
   // 2500mAH, https://pdfserv.maximintegrated.com/en/an/AN6358.pdf, 1.9.1.2
