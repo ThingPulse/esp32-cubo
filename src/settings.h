@@ -46,19 +46,16 @@ SOFTWARE.
 #define EPD_CLK 18
 #define EPD_DIN 23
 
-#define GAUGE_SDA 33
-#define GAUGE_SCL 22
-
 #define IMU_INT GPIO_NUM_36
 #define IMU_SDA 15
 #define IMU_SCL 13
 
+#define GAUGE_SDA 33
+#define GAUGE_SCL 22
+
 #define RTC_SDA 33
 #define RTC_SCL 22
 #define RTC_INT GPIO_NUM_39
-
-#define BME_SCL 21
-#define BME_SDA 26
 
 #define USR_LED_1 32
 #define USR_LED_2 25
