@@ -7,13 +7,22 @@ The ESP32-Cubo is a device based on the Espressif ESP32 and comes with the follo
 - USB connector for programming and charging
 - CP2104 USB-to-Serial Chip
 - 2x User controllable LEDs, red and green
+- Inertial Measurement Unit ADXL345
 - MAX17055 Fuel Gauge Chip for measuring battery voltage and estimating remaining capacity
 - DS3231 Real Time Clock Chip for keeping time, powered by coin cell battery
 - Reset Button
 
 ## Prerequisites
+- esp32-cubo hardware
+- usb cable to connect your computer to the device. 
 - git installed on your command line
+- experience in programming the ESP32 by using the Arduino platform
 
+
+## Install the CP2102 driver
+
+This driver is required to programm the esp32-cubo. It enables your computer to talk to the USB-to-Serial chip on the PCB.
+To install the driver please follow the instructions under https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers
 
 ## Setup Development environment
 
@@ -31,3 +40,20 @@ To get the sample code run
 git clone https://github.com/thingpulse/esp32-cubo
 ```
 from your command line or download the zip file from https://github.com/ThingPulse/esp32-cubo/archive/master.zip and unpack it. 
+
+
+## Components Explained
+
+### The ePaper Display
+
+The 1.54" ePaper display has 200x200 black and white pixels. The display can maintain the state of the pixels even without
+supporting power. This makes is a great tool for devices running from batteries since it only consumes energy during updates.
+
+In this sample we use the ThingPulse Minigrafx library to control the display. You can find more information for programming
+the display here: https://github.com/ThingPulse/minigrafx/blob/master/API.md
+
+### The ADXL345 IMU
+
+The ADXL345 chip can measure movement/accelereation in three axes. It can wakeup the main processor from deep sleep
+when movement is detected. It can also be setup to detect taps  or double taps in one of the three axes. This repository
+contains a slightly modified copy of a ADXL345 driver by Korneliusz Jarzebski
