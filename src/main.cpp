@@ -26,6 +26,9 @@ SOFTWARE.
 #include "DisplayDriver.h"
 #include "artwork.h"
 #include "settings.h"
+#include "upng.h"
+#include "FS.h"
+#include "SPIFFS.h"
 
 #define MINI_BLACK 0
 #define MINI_WHITE 1
@@ -34,7 +37,9 @@ SOFTWARE.
 
 #define sleepSeconds 60
 
-extern const char bonjour01Start[] asm("_binary_images_1bit_Bonjour_01_bmp_start");
+extern const char willkommen[] asm("_binary_data_willkommen_hack_start");
+
+
 
 RTC_DATA_ATTR uint8_t rotationBeforeSleep = -1;
 
@@ -44,6 +49,10 @@ boolean isFastRefreshEnabled = false;
 
 EPD_WaveShare154D67 epd(EPD_CS, EPD_RST, EPD_DC, EPD_BUSY);
 MiniGrafx screenGfx = MiniGrafx(&epd, BITS_PER_PIXEL, palette, EPD_WIDTH, EPD_HEIGHT);
+
+upng_t* upng;
+uint16_t width, height, depth, iconWidth;
+#define FORMAT_SPIFFS_IF_FAILED true
 
 uint8_t counter = 0;
 uint8_t rotation = 0;
@@ -101,6 +110,61 @@ uint8_t getRotation() {
 
 }
 
+void closeFile() {
+
+}
+
+void drawPng(String filename, uint8_t xk, uint8_t yk) {
+  upng = upng_new_from_file(filename.c_str());
+  if (upng != NULL) {
+    upng_decode(upng);
+    upng_error errorCode = upng_get_error(upng);
+    if (errorCode == UPNG_EOK) {
+      width = upng_get_width(upng);
+      height = upng_get_height(upng);
+      depth = upng_get_bpp(upng) / 8;
+      iconWidth = width / 8;
+      log_d("Opened file %s", filename.c_str());
+      log_d("Width: %d, height: %d, bit depth: %d", width, height, depth);
+    } else {
+      log_d("Failed to open file: %d", errorCode);
+      return;
+    }
+  } else {
+      log_i("Failed to load file");
+      return;
+  }
+
+  log_d("Drawing %d, %d", xk, yk);
+  uint16_t d, xOffset, yOffset;
+  uint16_t greyLevel;
+
+
+  if (upng_get_error(upng) == UPNG_EOK) {
+    xOffset = xk * 8;
+    yOffset = yk * 8;
+    if (upng_get_format(upng) == UPNG_RGB8 || upng_get_format(upng) == UPNG_RGBA8) {
+      for (uint8_t y = 0; y < height; y++) {
+        for (uint8_t x = 0; x < width; x++) {
+          greyLevel = 0;
+          for (d = 0; d != depth; ++d) {
+            greyLevel += upng_get_buffer(upng)[(y - yOffset - 1) * width * depth + (x + xOffset) * depth + (depth - d - 1)];
+          }
+          greyLevel = greyLevel / 3;
+          screenGfx.setColor(greyLevel > 128 ? MINI_WHITE : MINI_BLACK);
+          screenGfx.setPixel(x,y);
+        }
+      }
+      log_d("Freeing resources");
+      upng_free(upng);
+      //leds.show();
+      //leds.wait();
+    } else {
+      log_d("Wrong bit depth");
+    }
+  }
+}
+
 void initIMU() {
     if (!accelerometer.begin(IMU_SDA, IMU_SCL))
     {
@@ -148,38 +212,35 @@ void drawScreen() {
     if (rotation != rotationBeforeSleep) {
       screenGfx.fillBuffer(MINI_WHITE);
       screenGfx.setColor(MINI_BLACK);
-      //screenGfx.drawString(100, 100, String(getRotation()));
       switch (rotation) {
         case 0:
           screenGfx.setRotation(3);
-          screenGfx.drawPalettedBitmapFromPgm(0, 0, date02);
-          
+          drawPng("/willkommen_hack.png", 0, 0);
           break;
         case 1:
           screenGfx.setRotation(0);
-          screenGfx.drawPalettedBitmapFromPgm(0, 0, weather);
-          
+          drawPng("/Bonjour_01.png", 0, 0);
           break;
         case 2:
           screenGfx.setRotation(1);
-          screenGfx.drawPalettedBitmapFromPgm(0, 0, spruch01);
+          drawPng("/Bonjour_02.png", 0, 0);
           
           break;
         case 3:
           screenGfx.setRotation(2);
-          screenGfx.drawPalettedBitmapFromPgm(0, 0, kippen);
+          drawPng("/Date.png", 0, 0);
           break;
         case 4:
           screenGfx.setRotation(1);
-          screenGfx.drawPalettedBitmapFromPgm(0, 0, willkommen);
+          drawPng("/Heart.png", 0, 0);
           break;
         case 5:
           screenGfx.setRotation(1);
-          screenGfx.drawPalettedBitmapFromPgm(0, 0, bonjour01Start);
+          drawPng("/kippen.png", 0, 0);
           break;
         default:
           screenGfx.setRotation(1);
-          screenGfx.drawPalettedBitmapFromPgm(0, 0, bonjour01Start);
+          drawPng("/Spruch_01.png", 0, 0);
           break;
       }
       screenGfx.setColor(MINI_BLACK);
@@ -194,6 +255,11 @@ void setup() {
   Serial.begin(115200);
 
   Serial.printf("Rotation before last sleep: %d\n", rotationBeforeSleep);
+
+  if(!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)){
+        Serial.println("SPIFFS Mount Failed");
+        return;
+  }
 
   screenGfx.init();
   screenGfx.fillBuffer(MINI_WHITE);

@@ -57,3 +57,11 @@ the display here: https://github.com/ThingPulse/minigrafx/blob/master/API.md
 The ADXL345 chip can measure movement/accelereation in three axes. It can wakeup the main processor from deep sleep
 when movement is detected. It can also be setup to detect taps  or double taps in one of the three axes. This repository
 contains a slightly modified copy of a ADXL345 driver by Korneliusz Jarzebski
+
+## Uploading Filesystem
+
+In order to have the files under data/ available they need to be uploaded to the device first. Platformio creates a .bin file
+which is then flashed to the device. Everytime you change the content under data/ this needs to be done. To this execute the following
+task: env:esp-wrover-kit > Platform > Upload Filesystem Image
+
+![File Upload](/images/Fileupload.png)
