@@ -65,3 +65,10 @@ which is then flashed to the device. Everytime you change the content under data
 task: env:esp-wrover-kit > Platform > Upload Filesystem Image
 
 ![File Upload](/images/Fileupload.png)
+
+## Upload Code
+
+To compile the code you can click on the checkmark icon in VS Code's footer. The arrow to the right will do the same and upload
+the binary to the device. To plug icon turns on the serial console to monitor what is happening on the device.
+
+![Visual Studio Code Footer](/images/Footer.png)
