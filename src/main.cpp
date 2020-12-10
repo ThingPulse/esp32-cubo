@@ -156,13 +156,11 @@ void drawPng(String filename, uint8_t xk, uint8_t yk) {
         }
       }
       log_d("Freeing resources");
-      upng_free(upng);
-      //leds.show();
-      //leds.wait();
     } else {
       log_d("Wrong bit depth");
     }
   }
+  upng_free(upng);
 }
 
 void initIMU() {
@@ -224,11 +222,10 @@ void drawScreen() {
         case 2:
           screenGfx.setRotation(1);
           drawPng("/Bonjour_02.png", 0, 0);
-          
           break;
         case 3:
           screenGfx.setRotation(2);
-          drawPng("/Date.png", 0, 0);
+          drawPng("/willkommen_hack.png", 0, 0);
           break;
         case 4:
           screenGfx.setRotation(1);
@@ -236,7 +233,7 @@ void drawScreen() {
           break;
         case 5:
           screenGfx.setRotation(1);
-          drawPng("/kippen.png", 0, 0);
+          drawPng("/willkommen_hack.png", 0, 0);
           break;
         default:
           screenGfx.setRotation(1);
