@@ -12,8 +12,8 @@ The ESP32-Cubo is a device based on the Espressif ESP32 and comes with the follo
 - DS3231 Real Time Clock Chip for keeping time, powered by coin cell battery
 - Reset Button
 
-![Visual Studio Code Footer](/images/Footer.png)
-(/images/Cubo_Vorlage.pdf)
+![Visual Studio Code Footer](/images/cubo-hardware.jpg)
+[Template for building the cube](/images/Cubo_Vorlage.pdf)
 
 ## Prerequisites
 - esp32-cubo hardware
