@@ -14,8 +14,8 @@ The ESP32-Cubo is a device based on the Espressif ESP32 and comes with the follo
 
 ![Visual Studio Code Footer](/images/cubo-hardware.jpg)
 
-## Template for building a paper mockup
-[Download paper template](/images/Cubo_Vorlage.pdf)
+## Template for building a cardboard mockup
+[Download cardboard template](/images/Cubo_Vorlage.pdf)
 
 ## Prerequisites
 - esp32-cubo hardware
