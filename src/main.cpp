@@ -20,6 +20,7 @@ SOFTWARE.
 */
 
 #include <SPI.h>
+#include <JPEGDecoder.h>
 #include "ADXL345.h"
 #include "EPD_WaveShare_154D67.h"
 #include "MiniGrafx.h"
@@ -111,6 +112,51 @@ uint8_t getRotation() {
 }
 
 void closeFile() {
+
+}
+
+void drawJpeg(String filename, int xpos, int ypos) {
+  char buffer[filename.length() + 1];
+  filename.toCharArray(buffer, filename.length() + 1);
+  
+  JpegDec.decodeFile(buffer);
+  uint16_t  *pImg;
+  uint16_t mcu_w = JpegDec.MCUWidth;
+  uint16_t mcu_h = JpegDec.MCUHeight;
+  Serial.printf("MCU W/H: %d, %d\n", mcu_w, mcu_h);
+  // uint32_t mcu_pixels = mcu_w * mcu_h; // total pixels
+  // TODO immplmenet something to track drawtime performance
+  // uint32_t drawTime = millis();
+
+  while( JpegDec.read()){
+    
+    pImg = JpegDec.pImage;
+    int mcu_x = (JpegDec.MCUx * mcu_w) + xpos;
+    int mcu_y = (JpegDec.MCUy * mcu_h) + ypos;
+
+      
+    for (uint8_t y = 0; y < mcu_h; y++) {
+      for (uint8_t x = 0; x < mcu_w; x++) {
+
+          
+          int absX = mcu_x + x;
+          int absY = mcu_y + y;
+          if (absX >= 0 && absX < screenGfx.getWidth() && absY >= 0 && absY < screenGfx.getHeight()) {
+            // Threshold is at 50% grey to either display black or white pixel
+            uint8_t colorIdx = *pImg < 32767 ? 0 : 1;
+            screenGfx.setColor(colorIdx);
+            //Serial.println(colorIdx);
+            screenGfx.setPixel(absX, absY);
+
+          }
+          //Serial.printf("x: %d, y: %d, color: %d\n", absX, absY, pImg);
+        *pImg++;
+      }
+    }
+    
+    yield();
+
+  }
 
 }
 
@@ -213,31 +259,31 @@ void drawScreen() {
       switch (rotation) {
         case 0:
           screenGfx.setRotation(3);
-          drawPng("/Cubo_DPS_01.png", 0, 0);
+          drawJpeg("/Cubo_DPS_01.jpg", 0, 0);
           break;
         case 1:
           screenGfx.setRotation(0);
-          drawPng("/Cubo_DPS_02.png", 0, 0);
+          drawJpeg("/Cubo_DPS_02.jpg", 0, 0);
           break;
         case 2:
           screenGfx.setRotation(1);
-          drawPng("/Cubo_DPS_03.png", 0, 0);
+          drawJpeg("/Cubo_DPS_03.jpg", 0, 0);
           break;
         case 3:
           screenGfx.setRotation(2);
-          drawPng("/Cubo_DPS_04.png", 0, 0);
+          drawJpeg("/Cubo_DPS_04.jpg", 0, 0);
           break;
         case 4:
           screenGfx.setRotation(1);
-          drawPng("/Heart.png", 0, 0);
+          drawJpeg("/Cubo_DPS_05.jpg", 0, 0);
           break;
         case 5:
           screenGfx.setRotation(1);
-          drawPng("/Cubo_DPS_01.png", 0, 0);
+          drawJpeg("/Cubo_DPS_06.jpg", 0, 0);
           break;
         default:
           screenGfx.setRotation(1);
-          drawPng("/Cubo_DPS_02.png", 0, 0);
+          drawJpeg("/Cubo_DPS_01.jpg", 0, 0);
           break;
       }
       screenGfx.setColor(MINI_BLACK);
