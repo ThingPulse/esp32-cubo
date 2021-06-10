@@ -35,7 +35,7 @@ SOFTWARE.
 
 #define BITS_PER_PIXEL 1
 
-#define sleepSeconds 60
+#define sleepSeconds 600
 
 extern const char willkommen[] asm("_binary_data_willkommen_hack_start");
 
@@ -104,7 +104,7 @@ uint8_t getRotation() {
         Serial.printf("Rotation: %d\n", rotation);
         return rotation;
       }
-      delay (100);
+      delay (50);
     }
     return 0;
 
@@ -213,19 +213,19 @@ void drawScreen() {
       switch (rotation) {
         case 0:
           screenGfx.setRotation(3);
-          drawPng("/willkommen_hack.png", 0, 0);
+          drawPng("/Cubo_DPS_01.png", 0, 0);
           break;
         case 1:
           screenGfx.setRotation(0);
-          drawPng("/Bonjour_01.png", 0, 0);
+          drawPng("/Cubo_DPS_02.png", 0, 0);
           break;
         case 2:
           screenGfx.setRotation(1);
-          drawPng("/Bonjour_02.png", 0, 0);
+          drawPng("/Cubo_DPS_03.png", 0, 0);
           break;
         case 3:
           screenGfx.setRotation(2);
-          drawPng("/willkommen_hack.png", 0, 0);
+          drawPng("/Cubo_DPS_04.png", 0, 0);
           break;
         case 4:
           screenGfx.setRotation(1);
@@ -233,15 +233,14 @@ void drawScreen() {
           break;
         case 5:
           screenGfx.setRotation(1);
-          drawPng("/willkommen_hack.png", 0, 0);
+          drawPng("/Cubo_DPS_01.png", 0, 0);
           break;
         default:
           screenGfx.setRotation(1);
-          drawPng("/Spruch_01.png", 0, 0);
+          drawPng("/Cubo_DPS_02.png", 0, 0);
           break;
       }
       screenGfx.setColor(MINI_BLACK);
-
       screenGfx.commit();
       rotationBeforeSleep = rotation;
     }
@@ -259,6 +258,7 @@ void setup() {
   }
 
   screenGfx.init();
+  screenGfx.setFastRefresh(false);
   screenGfx.fillBuffer(MINI_WHITE);
   screenGfx.setColor(MINI_BLACK);
   screenGfx.drawString(100, 100, String(millis()));
