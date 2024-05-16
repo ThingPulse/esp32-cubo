@@ -77,3 +77,9 @@ To compile the code you can click on the checkmark icon in VS Code's footer. The
 the binary to the device. To plug icon turns on the serial console to monitor what is happening on the device.
 
 ![Visual Studio Code Footer](/images/Footer.png)
+
+## License
+
+Copyright (c) 2020 - 2024, ThingPulse Ltd., Switzerland. All rights reserved.
+Hardware is licensed under Creative Commons [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+Software is licensed under MIT License, see [LICENSE](LICENSE).
